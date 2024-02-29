@@ -24,7 +24,7 @@ This issues tipjar is bc1qsaasrcqamcm96p0v3m46dne9d6hesuzm60hz3z
 
 ### Fund a project
 
-Projects and be fundend globally, or per issue.
+Projects and be funded globally, or per issue.
 
 ### Funding the issue
 
