@@ -1,5 +1,5 @@
 # sats-for-commits
-Sats for commits allows project owners to add bitcoin bounties on their issues.
+Sats for commits allows project owners to add bitcoin bounties on their issues to pay for contributions, and let contributors claim bitcoin for their commits with their GPG key.
 
 ## Setup
 
@@ -24,7 +24,9 @@ This issues tipjar is bc1qsaasrcqamcm96p0v3m46dne9d6hesuzm60hz3z
 
 ### Fund a project
 
-Projects and be funded globally, or per issue.
+Projects can be funded globally, or per issue.  Per issues can encourage contributions to specific issues, while global funding can be used to encourage contributions to the project as a whole.
+
+Per issue gives more fine grained control, but can be more difficult to manage.  Global funding is easier to manage, but can be less effective at encouraging contributions to specific issues.
 
 ### Funding the issue
 
@@ -40,7 +42,15 @@ If the project is funded, the amount of sats per issue can be calculated by the 
 
 ## Test vectors
 
+The following nemonic is used to generate the keys for the test vectors.
+
 `year define slow hunt miss awake boil wrist sadness sail speak bench`
 
 * zprvAcVNoVY3JwpXpEerADLkrqDY4jjgYpswM9SiXfBd5GR2G3XoTkp6VJFFsExewcu7o4GfwsmV3BXakWTVgs8jdxbbmSuQeWj6pbeSnQ8a4gQ
 * zpub6qUjD14w9KNq2ijKGEsmDyAGcmaAxHbniNNKL3bEdbx18qrx1J8M36ZjiWVyTbhRJ5cUJWmLVhDZiJSfgQExEeaLpHosXbfWiPDoornsrmT
+
+## GitHub permissions
+
+* `issues` - Read/write
+* `secrets` - Read
+* `pull requests` - Read/write

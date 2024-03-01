@@ -1,0 +1,78 @@
+/* Basic Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%; /* Ensure the html and body occupy full height */
+}
+
+body {
+    display: flex;
+    flex-direction: column; /* Makes the main axis vertical */
+    font-family: 'Arial', sans-serif;
+    background-color: #F0E6F6; /* Light pastel background */
+    color: #333;
+    min-height: 100vh; /* Ensure body takes at least the viewport height */
+}
+
+main {
+    flex: 1; /* Allows main content to expand and push the footer down */
+}
+
+header {
+    background-color: #FFD7E9; /* Pastel header background */
+    padding: 20px 10%;
+}
+
+header h1 {
+    color: #333;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+}
+
+nav ul li {
+    margin-left: 20px;
+}
+
+nav ul li a {
+    text-decoration: none;
+    color: #333;
+}
+
+.btn-primary {
+    background-color: #A7BBC7; /* Soft blue button */
+    color: white;
+    padding: 10px 20px;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+#hero {
+    background-color: #FDEBD3; /* Warm pastel section background */
+    padding: 50px 10%;
+    text-align: center;
+}
+
+#hero h1 {
+    font-family: 'Pacifico', cursive; /* Use the Pacifico font */
+    font-size: 48px; /* Large font size for the hero text */
+    color: #333; /* Adjust color if necessary */
+    margin-bottom: 20px; /* Spacing below the hero text */
+}
+
+section {
+    padding: 50px 10%;
+}
+
+footer {
+    background-color: #FFD7E9;
+    text-align: center;
+    padding: 20px 0;
+    font-size: 0.8rem;
+}
