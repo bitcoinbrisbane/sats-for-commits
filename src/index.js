@@ -8,40 +8,25 @@ const ecc = require("tiny-secp256k1");
 const bip32 = BIP32Factory(ecc);
 const bip39 = require("bip39");
 const bitcoin = require("bitcoinjs-lib");
+const CryptoAccount = require("send-crypto");
 
 // load dotenv
 require("dotenv").config();
+
+const network = process.env.NETWORK || bitcoin.networks.testnet;
 
 // add json middleware
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("Hello World");
+  res.send("To da moon! 🚀🌕");
 });
 
 app.get("/api", (req, res) => {
-  res.send("Hello API World");
+  res.send("To da moon! 🚀🌕");
 });
 
-app.post("/api", async (req, res) => {
-  // if (req.body?.action !== "opened") {
-  //   return;
-  // }
-
-  if (req.body?.repository?.id === undefined) {
-    res.status(500).send("Repository ID is required");
-    return;
-  }
-
-  if (req.body?.repository?.id > 4294967296) {
-    res.status(500).send("Repository ID too big");
-    return;
-  }
-
-  // 4294967296
-  console.log(req.body);
-  console.table(req.body?.issue?.labels);
-
+const createOctokit = () => {
   const privateKey = fs.readFileSync("src/private-key.pem", "utf-8");
 
   // Octokit.js
@@ -55,34 +40,226 @@ app.post("/api", async (req, res) => {
     },
   });
 
-  const full_name = req.body?.repository?.full_name;
-  const issue = req.body?.issue.number;
+  return octokit;
+};
 
-  const address = createIssueAddress(
-    req.body?.repository?.id,
-    req.body?.issue.number
-  );
+app.post("/api", async (req, res) => {
+  console.log(req.body);
 
-  await octokit.request(`PATCH /repos/${full_name}/issues/${issue}`, {
-    body: `This issue's tip jar address is ${address}`,
+  if (
+    req.body?.action === "closed" &&
+    req.body?.pull_request?.merged === true
+  ) {
+    return;
+  }
+
+  if (req.body?.repository?.id === undefined) {
+    res.status(500).send("Repository ID is required");
+    return;
+  }
+
+  if (req.body?.repository?.id > 4294967296) {
+    res.status(500).send("Repository ID too big");
+    return;
+  }
+
+  if (req.body?.action === "assigned") {
+    const full_name = req.body?.repository?.full_name;
+    const repo_id = req.body?.repository?.id;
+    const issue = req.body?.issue.number;
+    await addAssignedUserToIssue(
+      repo_id,
+      full_name,
+      issue,
+      req.body?.assignee?.id
+    );
+    return;
+  }
+
+  console.table(req.body?.issue?.labels);
+  if (req.body?.issue?.labels?.find((label) => label.name === "bug")) {
+    console.log("Adding bug bounty address");
+    const full_name = req.body?.repository?.full_name;
+    const repo_id = req.body?.repository?.id;
+    const issue = req.body?.issue.number;
+    await addBountyToIssue(repo_id, full_name, issue);
+    res.status(200).send("Issue patched");
+    return;
+  }
+
+  if (req.body?.issue) {
+    console.log("Adding tip jar address");
+    const full_name = req.body?.repository?.full_name;
+    const issue = req.body?.issue.number;
+
+    await addTipJarToIssue(full_name, issue);
+
+    res.status(200).send("Issue patched");
+    return;
+  }
+
+  if (req.body?.pull_request) {
+    console.log("Closing PR and emptying tip jar");
+    const full_name = req.body?.repository?.full_name;
+    const pr = req.body?.pull_request.number;
+
+    await closePR(full_name, pr);
+
+    res.status(200).send("PR closed");
+    return;
+  }
+});
+
+const addBountyToIssue = async (repo_id, full_name, issue) => {
+  const octokit = createOctokit();
+  const treasury = getRepoAddress(repo_id);
+  const address = getIssueAddress(repo_id, issue);
+
+  const txid = await sendTip(repo_id, treasury, address, 1000);
+
+  await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
+    body: `Adding 1,000 sats to the bug bounty. The TX hash is ${txid}`,
     headers: {
       "X-GitHub-Api-Version": "2022-11-28",
     },
   });
-});
+};
 
-const createIssueAddress = (repo_id, issue_id) => {
-  const path = `m/44'/0'/0'/0/${repo_id}/${issue_id}`;
+const addAssignedUserToIssue = async (full_name, issue, user_id) => {
+  const octokit = createOctokit();
+  const address = geUserAddress(user_id);
+
+  await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
+    body: `The assigned users btc address is ${address}`,
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+};
+
+const addTipJarToIssue = async (repo_id, full_name, issue) => {
+  const octokit = createOctokit();
+  const address = getIssueAddress(repo_id, issue);
+
+  await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
+    body: `This issue's unique tip jar address is ${address}`,
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+};
+
+// Send a tip from the issues address to GH user
+const closePR = async (full_name, pr) => {
+  const octokit = await createOctokit();
+  const message = `This PR has been closed and the tip jar address has been emptied.`;
+
+  // Add to PR comment
+  await octokit.request(`POST /repos/${full_name}/issues/${pr}/comments`, {
+    body: `This PR has been closed and the tip jar address has been emptied.`,
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+
+  await octokit.request(`PATCH /repos/${full_name}/pulls/${pr}`, {
+    state: "closed",
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+};
+
+// Note, change will go to the treasury address or the user's address
+const geUserAddress = (user_id) => {
+  const path = `m/44'/0'/0'/0/0/${user_id}`;
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
   const seed = bip39.mnemonicToSeedSync(mnemonic);
-  const root = bip32.fromSeed(seed, bitcoin.networks.mainnet);
+  const root = bip32.fromSeed(seed, network);
   const child = root.derivePath(path);
   const address = bitcoin.payments.p2wpkh({
     pubkey: child.publicKey,
   });
   return address.address;
+};
+
+// Repo treasury address
+const getRepoAddress = (repo_id) => {
+  const path = `m/44'/0'/0'/0/${repo_id}/0`;
+  const mnemonic =
+    process.env.MNEMONIC ||
+    "praise you muffin lion enable neck grocery crumble super myself license ghost";
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const root = bip32.fromSeed(seed, network);
+  const child = root.derivePath(path);
+  const address = bitcoin.payments.p2wpkh({
+    pubkey: child.publicKey,
+  });
+  return address.address;
+};
+
+const getIssueAddress = (repo_id, issue_id) => {
+  const path = `m/44'/0'/0'/0/${repo_id}/${issue_id}`;
+  const mnemonic =
+    process.env.MNEMONIC ||
+    "praise you muffin lion enable neck grocery crumble super myself license ghost";
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const root = bip32.fromSeed(seed, network);
+  const child = root.derivePath(path);
+  const address = bitcoin.payments.p2wpkh({
+    pubkey: child.publicKey,
+  });
+  return address.address;
+};
+
+const sendTip = async (repo_id, from, to, amount) => {
+
+  const path = `m/44'/0'/0'/0/${repo_id}/0`;
+  const mnemonic =
+    process.env.MNEMONIC ||
+    "praise you muffin lion enable neck grocery crumble super myself license ghost";
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const root = bip32.fromSeed(seed, network);
+  const child = root.derivePath(path);
+  const privateKeyBuffer = child.privateKey;
+
+  // Convert the private key to WIF (Wallet Import Format) for easier use and readability
+  // const privateKeyWIF = bitcoin.ECPair.fromPrivateKey(privateKeyBuffer);
+
+  const account = new CryptoAccount(Buffer.from(privateKeyBuffer, 'hex', network));
+  console.log(account.address("BTC"));
+  const balance = await account.getBalance("BTC");
+
+  console.log(balance);
+  if (balance < amount) {
+    console.log("Insufficient funds");
+    return;
+  }
+
+  console.log(await account.send("BTC", to, amount));
+  // const txb = new bitcoin.TransactionBuilder(network);
+  // const unspent = await getUnspent(from);
+
+  // if (unspent === undefined) {
+  //   return;
+  // }
+
+  // const tx = txb.addInput(unspent.txid, unspent.vout);
+  // txb.addOutput(to, amount);
+  // txb.sign(0, keyPair);
+  // const txHex = txb.build().toHex();
+  // const txid = await broadcast(txHex);
+  // return txid;
+};
+
+const getUnspent = async (address) => {
+  const response = await axios.get(
+    `https://api.blockcypher.com/v1/btc/test3/addrs/${address}?unspentOnly=true`
+  );
+  const unspent = response.data.txrefs[0];
+  return unspent;
 };
 
 const port = process.env.PORT || 3000;

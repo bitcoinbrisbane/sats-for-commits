@@ -9,6 +9,14 @@ Sats for commits allows project owners to add bitcoin bounties on their issues t
 
 ## Workflow
 
+### Actions table
+
+|Object | Action / Verb | Description |
+|---|---|---|
+|Issue | created | Adds the tip jar address to the created issue |
+|Issue | funded | Adds the amount to the issues comments with tx hash.  Updates the issue label |
+|Issue | closed | If the issue is no longer relevate, refund |
+
 ### Creating the issue
 
 When a project owner creates a new issue, the issue is given a sequential integer as its id. EG `https://github.com/bitcoinbrisbane/sats-for-commits/issues/1`. This ID will for the HD address for the issue, and add the address to the issue via the PATCH route.
