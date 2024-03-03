@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "add": "^2.0.6",
+    "axios": "^1.6.7",
     "bip32": "^4.0.0",
     "bip39": "^3.1.0",
     "bitcoinjs-lib": "^6.1.5",

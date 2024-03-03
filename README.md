@@ -15,7 +15,17 @@ Sats for commits allows project owners to add bitcoin bounties on their issues t
 |---|---|---|
 |Issue | created | Adds the tip jar address to the created issue |
 |Issue | funded | Adds the amount to the issues comments with tx hash.  Updates the issue label |
-|Issue | closed | If the issue is no longer relevate, refund |
+|Issue | closed | If the issue is no longer relevant, refund |
+
+### Issues to sats table
+
+Using the following table, the amount of sats per issue can be calculated.
+
+|Issue | Label | Sats |
+|---|---|---|
+|Good first issue | good-first-issue | 1000 |
+|Help wanted | help-wanted | 5000 |
+|Bug | bug | 2000 |
 
 ### Creating the issue
 
@@ -64,6 +74,10 @@ Each GitHub user has an integer ID. This ID is used to generate a HD key for the
 ```
 
 ## Matching GPG keys to GitHub users
+
+## Other dependencies
+
+The app uses blockcypher to get the balance of the address, and to get the transaction details.
 
 ## Test vectors
 

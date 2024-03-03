@@ -9,11 +9,13 @@ const bip32 = BIP32Factory(ecc);
 const bip39 = require("bip39");
 const bitcoin = require("bitcoinjs-lib");
 const CryptoAccount = require("send-crypto");
+const { testnet } = require("bitcoinjs-lib/src/networks");
+const axios = require("axios");
 
 // load dotenv
 require("dotenv").config();
 
-const network = process.env.NETWORK || bitcoin.networks.testnet;
+const network = bitcoin.networks.testnet;
 
 // add json middleware
 app.use(express.json());
@@ -77,7 +79,9 @@ app.post("/api", async (req, res) => {
   }
 
   console.table(req.body?.issue?.labels);
-  if (req.body?.issue?.labels?.find((label) => label.name === "bug")) {
+
+  // Fund open bug issues
+  if (req.body?.issue?.labels?.find((label) => label.name === "bug") && req.body?.issue?.state === "open") {
     console.log("Adding bug bounty address");
     const full_name = req.body?.repository?.full_name;
     const repo_id = req.body?.repository?.id;
@@ -87,12 +91,25 @@ app.post("/api", async (req, res) => {
     return;
   }
 
-  if (req.body?.issue) {
+  if (req.body?.issue && req.body?.action === "opened") {
     console.log("Adding tip jar address");
     const full_name = req.body?.repository?.full_name;
+    const repo_id = req.body?.repository?.id;
     const issue = req.body?.issue.number;
 
-    await addTipJarToIssue(full_name, issue);
+    await addTipJarToIssue(repo_id, full_name, issue);
+
+    res.status(200).send("Issue patched");
+    return;
+  }
+
+  if (req.body?.issue && req.body?.action === "closed") {
+    console.log("Refunding any bounty to the treasury");
+    const full_name = req.body?.repository?.full_name;
+    const repo_id = req.body?.repository?.id;
+    const issue = req.body?.issue.number;
+
+    await refundingIssue(repo_id, full_name, issue);
 
     res.status(200).send("Issue patched");
     return;
@@ -116,6 +133,10 @@ const addBountyToIssue = async (repo_id, full_name, issue) => {
   const address = getIssueAddress(repo_id, issue);
 
   const txid = await sendTip(repo_id, treasury, address, 1000);
+
+  if (txid === undefined) {
+    return;
+  }
 
   await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
     body: `Adding 1,000 sats to the bug bounty. The TX hash is ${txid}`,
@@ -149,6 +170,19 @@ const addTipJarToIssue = async (repo_id, full_name, issue) => {
   });
 };
 
+const refundingIssue = async (repo_id, full_name, issue) => {
+  const octokit = createOctokit();
+  const address = getIssueAddress(repo_id, issue);
+  const treasury = getRepoAddress(repo_id);
+
+  await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
+    body: `Refunding btc back to the treasury ${treasury}`,
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+};
+
 // Send a tip from the issues address to GH user
 const closePR = async (full_name, pr) => {
   const octokit = await createOctokit();
@@ -172,7 +206,8 @@ const closePR = async (full_name, pr) => {
 
 // Note, change will go to the treasury address or the user's address
 const geUserAddress = (user_id) => {
-  const path = `m/44'/0'/0'/0/0/${user_id}`;
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const path = `m/44'/${coin}'/0'/0/0/${user_id}`;
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
@@ -181,13 +216,15 @@ const geUserAddress = (user_id) => {
   const child = root.derivePath(path);
   const address = bitcoin.payments.p2wpkh({
     pubkey: child.publicKey,
+    network: network,
   });
   return address.address;
 };
 
 // Repo treasury address
 const getRepoAddress = (repo_id) => {
-  const path = `m/44'/0'/0'/0/${repo_id}/0`;
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const path = `m/44'/${coin}'/0'/0/${repo_id}/0`;
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
@@ -196,12 +233,14 @@ const getRepoAddress = (repo_id) => {
   const child = root.derivePath(path);
   const address = bitcoin.payments.p2wpkh({
     pubkey: child.publicKey,
+    network: network,
   });
   return address.address;
 };
 
 const getIssueAddress = (repo_id, issue_id) => {
-  const path = `m/44'/0'/0'/0/${repo_id}/${issue_id}`;
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const path = `m/44'/${coin}'/0'/0/${repo_id}/${issue_id}`;
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
@@ -210,13 +249,17 @@ const getIssueAddress = (repo_id, issue_id) => {
   const child = root.derivePath(path);
   const address = bitcoin.payments.p2wpkh({
     pubkey: child.publicKey,
+    network: network,
   });
   return address.address;
 };
 
 const sendTip = async (repo_id, from, to, amount) => {
+  const treasury = getRepoAddress(repo_id);
+  console.log(treasury);
 
-  const path = `m/44'/0'/0'/0/${repo_id}/0`;
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const path = `m/44'/${coin}'/0'/0/${repo_id}/0`;
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
@@ -225,11 +268,27 @@ const sendTip = async (repo_id, from, to, amount) => {
   const child = root.derivePath(path);
   const privateKeyBuffer = child.privateKey;
 
+  const psbt = new bitcoin.Psbt();
+  const unspent = await getUnspent(from);
+
+  if (unspent === undefined) {
+    return;
+  }
+
+  const tx = psbt.addInput(unspent.txid, unspent.vout);
+  psbt.addOutput(to, amount);
+  psbt.sign(0, keyPair);
+  const txHex = psbt.build().toHex();
+  // const txid = await broadcast(txHex);
+  // return txid;
+
   // Convert the private key to WIF (Wallet Import Format) for easier use and readability
   // const privateKeyWIF = bitcoin.ECPair.fromPrivateKey(privateKeyBuffer);
 
-  const account = new CryptoAccount(Buffer.from(privateKeyBuffer, 'hex', network));
-  console.log(account.address("BTC"));
+  const account = new CryptoAccount(
+    Buffer.from(privateKeyBuffer, "hex", { network: testnet })
+  );
+  console.log(await account.address("BTC"));
   const balance = await account.getBalance("BTC");
 
   console.log(balance);
