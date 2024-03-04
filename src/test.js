@@ -1,14 +1,21 @@
-// import { CryptoAccount } from "crypto-account";
 const { BIP32Factory } = require("bip32");
+const { ECPairFactory } = require("ecpair");
+
 const ecc = require("tiny-secp256k1");
 const bip32 = BIP32Factory(ecc);
 const bip39 = require("bip39");
 const bitcoin = require("bitcoinjs-lib");
-const CryptoAccount = require("send-crypto");
-const { testnet } = require("bitcoinjs-lib/src/networks");
+// const CryptoAccount = require("send-crypto");
+// const { testnet } = require("bitcoinjs-lib/src/networks");
 const axios = require("axios");
 
+// const ECPairFactory = require("");
+const ECPair = ECPairFactory(ecc);
+
 const network = bitcoin.networks.testnet;
+
+// https://github.com/bitcoinbrisbane/test-for-commits/issues/11
+const ISSUE_ADDRESS = "tb1qxepdrdkm45lyh8sa8hfd3jqamgjamlk49gyl3m";
 
 const getUnspent = async (address) => {
   const url = `https://api.blockcypher.com/v1/btc/test3/addrs/${address}?unspentOnly=true`;
@@ -48,54 +55,78 @@ const test = async () => {
   // tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0
   console.log(address.address);
 
-  const psbt = new bitcoin.Psbt();
+  // example https://bitcoin.stackexchange.com/questions/118945/how-to-build-a-transaction-using-bitcoinjs-lib
+  const psbt = new bitcoin.Psbt({ network: network });
 
   const from = "tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0";
   const unspent = await getUnspent(from);
 
-  const utxo = await getAUtxo(
-    unspent.tx_hash,
-    "tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0",
-    1000
-  );
+  const utxo = await getAUtxo(unspent.tx_hash, from, 1000);
 
-  psbt.addInput({
-    hash: unspent.tx_hash,
+  //   psbt.addInput({
+  //     hash: unspent.tx_hash,
+  //     index: 0,
+  //     witnessUtxo: {
+  //       script: Buffer.from(
+  //         utxo.scriptpubkey,
+  //         "hex"
+  //       ),
+  //       value: utxo.value,
+  //     },
+  //     redeemScript: Buffer.from(utxo.scriptpubkey, "hex"),
+  //   });
+
+  const input = {
+    hash: "1abe5599863a47355ce106dd13ec1108f31ce5dd7f9e2564546abc26bc5b420c",
     index: 0,
-    witnessUtxo: {
-      script: Buffer.from(
-        "a914eb762ef1946c2d462764d30112ce27c531fdd60387",
-        "hex"
-      ),
-      value: utxo.value,
-    },
-    redeemScript: Buffer.from(utxo.scriptpubkey, "hex"),
-  });
+    // witnessUtxo: {
+    //   script: Buffer.from(
+    //     utxo.scriptpubkey,
+    //     "hex"
+    //   ),
+    //   value: utxo.value,
+    // },
+    // redeemScript: Buffer.from(utxo.scriptpubkey, "hex"),
+  };
 
-  const tx = psbt.addInput(unspent.txid, unspent.vout);
-  psbt.addOutput(to, amount);
-  psbt.sign(0, keyPair);
-  const txHex = psbt.build().toHex();
+  psbt.addInput(input);
+
+  const output = {
+    address: ISSUE_ADDRESS,
+    value: 1000,
+  };
+
+  psbt.addOutput(output);
+
+  const privateKeyAsHex = privateKeyBuffer.toString("hex");
+  // https://github.com/bitcoinjs/bitcoinjs-lib/blob/master/test/integration/transactions.spec.ts#L24C5-L26C7
+  const pk = ECPair.fromWIF(privateKeyAsHex, network);
+
+  psbt.signInput(0, pk);
+  psbt.finalizeInput(0);
+  //const tx = psbt.extractTransaction();
+  console.log(tx.toHex());
+
   // const txid = await broadcast(txHex);
   // return txid;
 
   // Convert the private key to WIF (Wallet Import Format) for easier use and readability
   // const privateKeyWIF = bitcoin.ECPair.fromPrivateKey(privateKeyBuffer);
 
-  const account = new CryptoAccount(
-    Buffer.from(privateKeyBuffer, "hex", { network: testnet })
-  );
+  //   const account = new CryptoAccount(
+  //     Buffer.from(privateKeyBuffer, "hex", { network: testnet })
+  //   );
 
-  console.log(await account.address("BTC"));
-  const balance = await account.getBalance("BTC");
+  //   console.log(await account.address("BTC"));
+  //   const balance = await account.getBalance("BTC");
 
-  console.log(balance);
-  if (balance < amount) {
-    console.log("Insufficient funds");
-    return;
-  }
+  //   console.log(balance);
+  //   if (balance < amount) {
+  //     console.log("Insufficient funds");
+  //     return;
+  //   }
 
-  console.log(await account.send("BTC", to, amount));
+  //   console.log(await account.send("BTC", to, amount));
 };
 
 test();
