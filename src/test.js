@@ -38,7 +38,7 @@ const getAUtxo = async (txid, to, amount) => {
 
 const test = async () => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const path = `m/44'/${coin}'/0'/0/1/0`;
+  const path = `m/84'/${coin}'/0'/0/1/0`;
   const mnemonic =
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
   const seed = bip39.mnemonicToSeedSync(mnemonic);

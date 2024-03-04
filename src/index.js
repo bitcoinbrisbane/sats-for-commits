@@ -214,20 +214,23 @@ const closePR = async (full_name, pr) => {
 // Note, change will go to the treasury address or the user's address
 const geUserAddress = (user_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const path = `m/44'/${coin}'/0'/0/0/${user_id}`;
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/0/${user_id}`;
   return getAddress(path);
 };
 
 // Repo treasury address
 const getRepoAddress = (repo_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const path = `m/44'/${coin}'/0'/0/${repo_id}/0`;
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/0`;
   return getAddress(path);
 };
 
 const getIssueAddress = (repo_id, issue_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const path = `m/44'/${coin}'/0'/0/${repo_id}/${issue_id}`;
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/${issue_id}`;
   return getAddress(path);
 };
 
@@ -250,7 +253,8 @@ const sendTip = async (repo_id, from, to, amount) => {
   console.log(treasury);
 
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const path = `m/44'/${coin}'/0'/0/${repo_id}/0`;
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/0`;
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
