@@ -28,6 +28,10 @@ app.get("/api", (req, res) => {
   res.send("To da moon! 🚀🌕");
 });
 
+const getTipAmount = (type) => {
+  return 1000;
+};
+
 const createOctokit = () => {
   const privateKey = fs.readFileSync("src/private-key.pem", "utf-8");
 
@@ -81,7 +85,10 @@ app.post("/api", async (req, res) => {
   console.table(req.body?.issue?.labels);
 
   // Fund open bug issues
-  if (req.body?.issue?.labels?.find((label) => label.name === "bug") && req.body?.issue?.state === "open") {
+  if (
+    req.body?.issue?.labels?.find((label) => label.name === "bug") &&
+    req.body?.issue?.state === "open"
+  ) {
     console.log("Adding bug bounty address");
     const full_name = req.body?.repository?.full_name;
     const repo_id = req.body?.repository?.id;
@@ -99,7 +106,7 @@ app.post("/api", async (req, res) => {
 
     await addTipJarToIssue(repo_id, full_name, issue);
 
-    res.status(200).send("Issue patched");
+    res.status(200).send("Issue tipped");
     return;
   }
 
@@ -111,7 +118,7 @@ app.post("/api", async (req, res) => {
 
     await refundingIssue(repo_id, full_name, issue);
 
-    res.status(200).send("Issue patched");
+    res.status(200).send("Issue refunded");
     return;
   }
 
@@ -208,39 +215,23 @@ const closePR = async (full_name, pr) => {
 const geUserAddress = (user_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const path = `m/44'/${coin}'/0'/0/0/${user_id}`;
-  const mnemonic =
-    process.env.MNEMONIC ||
-    "praise you muffin lion enable neck grocery crumble super myself license ghost";
-  const seed = bip39.mnemonicToSeedSync(mnemonic);
-  const root = bip32.fromSeed(seed, network);
-  const child = root.derivePath(path);
-  const address = bitcoin.payments.p2wpkh({
-    pubkey: child.publicKey,
-    network: network,
-  });
-  return address.address;
+  return getAddress(path);
 };
 
 // Repo treasury address
 const getRepoAddress = (repo_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const path = `m/44'/${coin}'/0'/0/${repo_id}/0`;
-  const mnemonic =
-    process.env.MNEMONIC ||
-    "praise you muffin lion enable neck grocery crumble super myself license ghost";
-  const seed = bip39.mnemonicToSeedSync(mnemonic);
-  const root = bip32.fromSeed(seed, network);
-  const child = root.derivePath(path);
-  const address = bitcoin.payments.p2wpkh({
-    pubkey: child.publicKey,
-    network: network,
-  });
-  return address.address;
+  return getAddress(path);
 };
 
 const getIssueAddress = (repo_id, issue_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const path = `m/44'/${coin}'/0'/0/${repo_id}/${issue_id}`;
+  return getAddress(path);
+};
+
+const getAddress = (path) => {
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";

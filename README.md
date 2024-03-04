@@ -41,8 +41,10 @@ The following text is added to the bottom of the issue, allow with the tags "btc
     url: 'https://api.github.com/repos/bitcoinbrisbane/test-for-commits/issues/1',
     id: 2164426968,
     number: 1
-    }
+  }
 ```
+
+The following text is added to the bottom of the issue.
 
 ```text
 This issues tipjar is bc1qsaasrcqamcm96p0v3m46dne9d6hesuzm60hz3z
@@ -70,7 +72,7 @@ Each GitHub user has an integer ID. This ID is used to generate a HD key for the
   sender: {
     login: 'bitcoinbrisbane',
     id: 131337
-    }
+  }
 ```
 
 ## Matching GPG keys to GitHub users
@@ -89,6 +91,8 @@ The following mnemonic is used to generate the keys for the test vectors.
 - zpub6qUjD14w9KNq2ijKGEsmDyAGcmaAxHbniNNKL3bEdbx18qrx1J8M36ZjiWVyTbhRJ5cUJWmLVhDZiJSfgQExEeaLpHosXbfWiPDoornsrmT
 
 ## GitHub permissions
+
+The app requires the following permissions.
 
 - `issues` - Read/write
 - `secrets` - Read
