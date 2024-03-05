@@ -274,6 +274,7 @@ const sendTip = async (repo_id, from, to, amount) => {
   psbt.addOutput(to, amount);
   psbt.sign(0, keyPair);
   const txHex = psbt.build().toHex();
+
   // const txid = await broadcast(txHex);
   // return txid;
 
