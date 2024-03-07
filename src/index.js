@@ -182,6 +182,10 @@ const refundingIssue = async (repo_id, full_name, issue) => {
   const address = getIssueAddress(repo_id, issue);
   const treasury = getRepoAddress(repo_id);
 
+  // 
+
+  const txid = await sendTip(repo_id, address, treasury, 1000);
+
   await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
     body: `Refunding btc back to the treasury ${treasury}`,
     headers: {
@@ -250,7 +254,7 @@ const getAddress = (path) => {
 
 const sendTip = async (repo_id, from, to, amount) => {
   const treasury = getRepoAddress(repo_id);
-  console.log(treasury);
+  console.log("Treasury address: " + treasury);
 
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const network_id = network === bitcoin.networks.testnet ? "84" : "44";
@@ -258,12 +262,13 @@ const sendTip = async (repo_id, from, to, amount) => {
   const mnemonic =
     process.env.MNEMONIC ||
     "praise you muffin lion enable neck grocery crumble super myself license ghost";
+  
   const seed = bip39.mnemonicToSeedSync(mnemonic);
   const root = bip32.fromSeed(seed, network);
   const child = root.derivePath(path);
   const privateKeyBuffer = child.privateKey;
 
-  const psbt = new bitcoin.Psbt();
+  const psbt = new bitcoin.Psbt({ network: network });
   const unspent = await getUnspent(from);
 
   if (unspent === undefined) {
@@ -309,13 +314,6 @@ const sendTip = async (repo_id, from, to, amount) => {
   // return txid;
 };
 
-const getUnspent = async (address) => {
-  const response = await axios.get(
-    `https://api.blockcypher.com/v1/btc/test3/addrs/${address}?unspentOnly=true`
-  );
-  const unspent = response.data.txrefs[0];
-  return unspent;
-};
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
