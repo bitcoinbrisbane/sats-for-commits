@@ -25,6 +25,43 @@ const getMnemonic = () => {
   );
 };
 
+
+// Note, change will go to the treasury address or the user's address
+const getUserAddress = (user_id) => {
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/0/${user_id}`;
+  return getAddress(path);
+};
+
+// Repo treasury address
+const getRepoAddress = (repo_id) => {
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/0`;
+  return getAddress(path);
+};
+
+const getIssueAddress = (repo_id, issue_id) => {
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/${issue_id}`;
+  return getAddress(path);
+};
+
+// todo: get from xpub key
+const getAddress = (path) => {
+  const mnemonic = getMnemonic();
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const root = bip32.fromSeed(seed, network);
+  const child = root.derivePath(path);
+  const address = bitcoin.payments.p2wpkh({
+    pubkey: child.publicKey,
+    network: network,
+  });
+  return address.address;
+};
+
 const getChild = (account, index) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const path = `m/44'/${coin}'/0'/${account}/0/${index}`;
@@ -237,6 +274,9 @@ const sendFromTreasury = async (repo_id, amount, to) => {
 };
 
 module.exports = {
+  getIssueAddress,
+  getRepoAddress,
+  getUserAddress,
   getBalance,
   getMnemonic,
   sendFromTreasury,

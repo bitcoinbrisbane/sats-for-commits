@@ -3,19 +3,11 @@ const app = express();
 const { Octokit, App } = require("octokit");
 const { createAppAuth } = require("@octokit/auth-app");
 const fs = require("fs");
-const { BIP32Factory } = require("bip32");
-const ecc = require("tiny-secp256k1");
-const bip32 = BIP32Factory(ecc);
-const bip39 = require("bip39");
-const bitcoin = require("bitcoinjs-lib");
 
-const { testnet } = require("bitcoinjs-lib/src/networks");
-const { getBalance, getMnemonic, sendFromTreasury } = require("./utils");
+const { getBalance, getIssueAddress, getRepoAddress, getUserAddress, sendFromTreasury } = require("./utils");
 
 // load dotenv
 require("dotenv").config();
-
-const network = bitcoin.networks.testnet;
 
 // add json middleware
 app.use(express.json());
@@ -250,47 +242,11 @@ const payBounty = async (full_name, pr, assignee_id) => {
 
   // Add to PR comment
   await octokit.request(`POST /repos/${full_name}/issues/${pr}/comments`, {
-    body: `This PR has been closed and the tip jar address has been emptied.`,
+    body: message,
     headers: {
       "X-GitHub-Api-Version": "2022-11-28",
     },
   });
-};
-
-// Note, change will go to the treasury address or the user's address
-const getUserAddress = (user_id) => {
-  const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
-  const path = `m/${network_id}'/${coin}'/0'/0/0/${user_id}`;
-  return getAddress(path);
-};
-
-// Repo treasury address
-const getRepoAddress = (repo_id) => {
-  const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
-  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/0`;
-  return getAddress(path);
-};
-
-const getIssueAddress = (repo_id, issue_id) => {
-  const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
-  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/${issue_id}`;
-  return getAddress(path);
-};
-
-// todo: get from xpub key
-const getAddress = (path) => {
-  const mnemonic = getMnemonic();
-  const seed = bip39.mnemonicToSeedSync(mnemonic);
-  const root = bip32.fromSeed(seed, network);
-  const child = root.derivePath(path);
-  const address = bitcoin.payments.p2wpkh({
-    pubkey: child.publicKey,
-    network: network,
-  });
-  return address.address;
 };
 
 const port = process.env.PORT || 3000;
