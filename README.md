@@ -9,6 +9,11 @@ Sats for commits allows project owners to add bitcoin bounties on their issues t
 
 ## Workflow
 
+Work flows for creating and funding issues are as follows:
+
+1. Create the issue.  This will add the tip jar address to the issue in the comments.
+2. Adding a label to the issue will add the amount of sats to the issue from the repos treasury.
+
 ### Actions table
 
 |Object | Action / Verb | Description |

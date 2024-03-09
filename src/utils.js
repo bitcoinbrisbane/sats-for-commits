@@ -10,8 +10,36 @@ const axios = require("axios");
 const ECPair = ECPairFactory(ecc);
 const network = bitcoin.networks.testnet;
 
+const FEE = 1000;
+
+// load dotenv
+require("dotenv").config();
+
 // https://github.com/bitcoinbrisbane/test-for-commits/issues/11
 const ISSUE_ADDRESS = "tb1qxepdrdkm45lyh8sa8hfd3jqamgjamlk49gyl3m";
+
+const getMnemonic = () => {
+  return (
+    process.env.MNEMONIC ||
+    "praise you muffin lion enable neck grocery crumble super myself license ghost"
+  );
+};
+
+const getChild = (account, index) => {
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const path = `m/44'/${coin}'/0'/${account}/0/${index}`;
+  const mnemonic = getMnemonic();
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const root = bip32.fromSeed(seed, network);
+  const child = root.derivePath(path);
+  return child;
+};
+
+const getBalance = async (address) => {
+  const url = `https://api.blockcypher.com/v1/btc/test3/addrs/${address}/balance`;
+  const response = await axios.get(url);
+  return response.data;
+};
 
 // Get TxIDs for an address
 const getUnspentTxIDs = async (address) => {
@@ -20,9 +48,9 @@ const getUnspentTxIDs = async (address) => {
   const unspent = response.data;
 
   const filtered = unspent.txrefs.filter((txref) => txref.spent === false);
-  const ids = filtered.txrefs.map((txref) => txref.tx_hash);
+  const ids = filtered.map((txref) => txref.tx_hash);
 
-  return ids
+  return ids;
 };
 
 const getAllUtxos = async (txid, to) => {
@@ -35,17 +63,25 @@ const getAllUtxos = async (txid, to) => {
   return _utxos;
 };
 
-const getAUtxos = async (txid, to, amount) => {
+const getAUtxo = async (txid, to, amount) => {
   // const url = `https://api.blockcypher.com/v1/btc/test3/txs/${txid}`;
   const url = `https://blockstream.info/testnet/api/tx/${txid}`;
   console.log(url);
   const response = await axios.get(url);
 
   const utxos = response.data.vout;
-  const utxo = utxos.find(
-    (vout) => vout.value >= amount && vout.scriptpubkey_address === to
-  );
-  return utxo;
+
+  for (let i = 0; i < utxos.length; i++) {
+    const vout = utxos[i];
+    if (vout.scriptpubkey_address === to && vout.value >= amount) {
+      return { index: i, vout: vout };
+    }
+  }
+
+  // const utxo = utxos.find(
+  //   (vout) => vout.value >= amount && vout.scriptpubkey_address === to
+  // );
+  // return utxo;
 };
 
 const getTxAsHex = async (txid) => {
@@ -63,16 +99,14 @@ const broadcast = async (txHex) => {
   return response.data;
 };
 
-
 const sendAll = async (index, to) => {
   const TX_ID =
     "1abe5599863a47355ce106dd13ec1108f31ce5dd7f9e2564546abc26bc5b420c";
 
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const path = `m/44'/${coin}'/0'/0/1/${index}`;
-  
-  const mnemonic =
-    "praise you muffin lion enable neck grocery crumble super myself license ghost";
+
+  const mnemonic = getMnemonic();
   const seed = bip39.mnemonicToSeedSync(mnemonic);
   const root = bip32.fromSeed(seed, network);
   const child = root.derivePath(path);
@@ -90,13 +124,13 @@ const sendAll = async (index, to) => {
   const psbt = new bitcoin.Psbt({ network: network });
 
   const amount = 1000;
-  const unspent = await getUnspent(from.address);
+  const unspent = await getUnspentTxIDs(from.address);
   const utxo = await getAUtxo(TX_ID, from.address, amount);
   const txAsHex = await getTxAsHex(TX_ID);
 
   const input = {
     hash: TX_ID,
-    index: 0,
+    index: utxo.index,
     nonWitnessUtxo: Buffer.from(txAsHex, "hex"),
   };
 
@@ -124,50 +158,68 @@ const sendAll = async (index, to) => {
   return txid;
 };
 
-const send = async (amount) => {
-  const TX_ID =
-    "1abe5599863a47355ce106dd13ec1108f31ce5dd7f9e2564546abc26bc5b420c";
-
+const sendFromTreasury = async (repo_id, amount, to) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
-  const path = `m/44'/${coin}'/0'/0/1/0`;
-  const mnemonic =
-    "praise you muffin lion enable neck grocery crumble super myself license ghost";
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/0`;
+  const mnemonic = getMnemonic();
+
   const seed = bip39.mnemonicToSeedSync(mnemonic);
   const root = bip32.fromSeed(seed, network);
   const child = root.derivePath(path);
 
-  const address = bitcoin.payments.p2wpkh({
+  const treasury = bitcoin.payments.p2wpkh({
     pubkey: child.publicKey,
     network: network,
   });
 
+  const treasuryBalance = await getBalance(treasury.address);
+
+  if (treasuryBalance.balance < amount) {
+    return;
+  }
+
   // https://live.blockcypher.com/btc-testnet/address/tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0/
   // tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0
-  console.log("to: " + address.address);
+  const from = treasury.address;
+  console.log("from: " + from);
 
   // example https://bitcoin.stackexchange.com/questions/118945/how-to-build-a-transaction-using-bitcoinjs-lib
   const psbt = new bitcoin.Psbt({ network: network });
 
-  const from = address.address;
+  const unspentIDs = await getUnspentTxIDs(from);
 
-  const unspent = await getUnspent(from);
-  const utxo = await getAUtxo(TX_ID, from, 1000);
-  const txAsHex = await getTxAsHex(TX_ID);
+  if (unspentIDs.length === 0) {
+    console.log("No unspent txs");
+    return;
+  }
+
+  const utxo = await getAUtxo(unspentIDs[0], from, amount);
+  const txAsHex = await getTxAsHex(unspentIDs[0]);
 
   const input = {
-    hash: TX_ID,
-    index: 0,
+    hash: unspentIDs[0],
+    index: utxo.index,
     nonWitnessUtxo: Buffer.from(txAsHex, "hex"),
   };
 
   psbt.addInput(input);
 
   const output = {
-    address: ISSUE_ADDRESS,
-    value: 1000,
+    address: to,
+    value: amount,
   };
 
   psbt.addOutput(output);
+
+  const change = treasuryBalance.balance - amount - FEE;
+  if (change > 0) {
+    const changeOutput = {
+      address: from,
+      value: change,
+    };
+    psbt.addOutput(changeOutput);
+  }
 
   // https://github.com/bitcoinjs/bitcoinjs-lib/blob/master/test/integration/transactions.spec.ts#L24C5-L26C7
   const pk = ECPair.fromWIF(child.toWIF(), network);
@@ -184,3 +236,8 @@ const send = async (amount) => {
   return txid;
 };
 
+module.exports = {
+  getBalance,
+  getMnemonic,
+  sendFromTreasury,
+};
