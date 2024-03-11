@@ -114,11 +114,6 @@ const getAUtxo = async (txid, to, amount) => {
       return { index: i, vout: vout };
     }
   }
-
-  // const utxo = utxos.find(
-  //   (vout) => vout.value >= amount && vout.scriptpubkey_address === to
-  // );
-  // return utxo;
 };
 
 const getTxAsHex = async (txid) => {

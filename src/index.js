@@ -32,7 +32,11 @@ const getIssueAmount = (issue_type) => {
 };
 
 const createOctokit = () => {
-  const privateKey = fs.readFileSync("src/private-key.pem", "utf-8");
+  let privateKey = fs.readFileSync("src/private-key.pem", "utf-8");
+
+  if (process.env.PRIVATE_KEY) {
+    privateKey = process.env.PRIVATE_KEY;
+  }
 
   // Octokit.js
   // https://github.com/octokit/core.js#readme
@@ -75,6 +79,7 @@ app.post("/", async (req, res) => {
     return;
   }
 
+  // Add assignee address to issue
   if (req.body?.action === "assigned") {
     const full_name = req.body?.repository?.full_name;
     const repo_id = req.body?.repository?.id;
@@ -108,6 +113,7 @@ app.post("/", async (req, res) => {
     return;
   }
 
+  // Add address to issue
   if (req.body?.issue && req.body?.action === "opened") {
     console.log("Adding tip jar address");
 
@@ -121,18 +127,19 @@ app.post("/", async (req, res) => {
     return;
   }
 
-  // if (req.body?.issue && req.body?.action === "closed") {
-  //   console.log("Refunding any bounty to the repository treasury");
-  //   const full_name = req.body?.repository?.full_name;
-  //   const repo_id = req.body?.repository?.id;
-  //   const issue_id = req.body?.issue.number;
+  if (req.body?.issue && req.body?.action === "closed") {
+    console.log("Refunding any bounty to the repository treasury");
+    const full_name = req.body?.repository?.full_name;
+    const repo_id = req.body?.repository?.id;
+    const issue_id = req.body?.issue.number;
 
-  //   await refundingIssue(repo_id, full_name, issue_id);
+    // await refundingIssue(repo_id, full_name, issue_id);
 
-  //   res.status(200).send("Issue refunded");
-  //   return;
-  // }
+    res.status(200).send("Issue refunded");
+    return;
+  }
 
+  // Send bounty to assignee
   if (
     req.body?.pull_request &&
     req.body?.action === "closed" &&
