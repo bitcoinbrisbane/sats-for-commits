@@ -4,7 +4,14 @@ const { Octokit, App } = require("octokit");
 const { createAppAuth } = require("@octokit/auth-app");
 const fs = require("fs");
 
-const { getBalance, getIssueAddress, getRepoAddress, getUserAddress, sendFromTreasury } = require("./utils");
+const {
+  getBalance,
+  getIssueAddress,
+  getRepoAddress,
+  getUserAddress,
+  sendFromIssue,
+  sendFromTreasury,
+} = require("./utils");
 
 // load dotenv
 require("dotenv").config();
@@ -32,10 +39,14 @@ const getIssueAmount = (issue_type) => {
 };
 
 const createOctokit = () => {
-  let privateKey = fs.readFileSync("src/private-key.pem", "utf-8");
+  let privateKey;
 
-  if (process.env.PRIVATE_KEY) {
-    privateKey = process.env.PRIVATE_KEY;
+  // if (process.env.PRIVATE_KEY) {
+  //   privateKey = process.env.PRIVATE_KEY;
+  // }
+
+  if (!privateKey) {
+    privateKey = fs.readFileSync("src/private-key.pem", "utf-8");
   }
 
   // Octokit.js
@@ -59,15 +70,6 @@ app.get("/treasury/:id/balance", async (req, res) => {
   res.status(200).send(balanceResponse);
 });
 
-app.post("/tip", async (req, res) => {
-  const balanceResponse = await getBalance(
-    "tb1q9vt02j39x6tekclatwgcw6d935xvlz3qkt0kwk"
-  );
-
-  // await sendTip(req.body.from, req.body.to, req.body.amount);
-  res.status(200).send(balanceResponse);
-});
-
 app.post("/", async (req, res) => {
   if (req.body?.repository?.id === undefined) {
     res.status(500).send("Repository ID is required");
@@ -81,8 +83,9 @@ app.post("/", async (req, res) => {
 
   // Add assignee address to issue
   if (req.body?.action === "assigned") {
-    const full_name = req.body?.repository?.full_name;
-    const repo_id = req.body?.repository?.id;
+    // NOT SURE IF WE WANT TO DO THIS
+    // const full_name = req.body?.repository?.full_name;
+    // const repo_id = req.body?.repository?.id;
     // const issue_id = req.body?.issue.number;
     // await addAssignedUserToIssue(
     //   repo_id,
@@ -92,8 +95,6 @@ app.post("/", async (req, res) => {
     // );
     // return;
   }
-
-  console.table(req.body?.issue?.labels);
 
   // Fund open bug issues
   if (req.body?.action === "labeled" && req.body?.issue?.state === "open") {
@@ -115,15 +116,15 @@ app.post("/", async (req, res) => {
 
   // Add address to issue
   if (req.body?.issue && req.body?.action === "opened") {
-    console.log("Adding tip jar address");
+    console.log("Adding bounty address to the issue");
 
     const full_name = req.body?.repository?.full_name;
     const repo_id = req.body?.repository?.id;
     const issue_id = req.body?.issue.number;
 
-    await addTipJarToIssue(repo_id, full_name, issue_id);
+    await addBountyAddressIssue(repo_id, full_name, issue_id);
 
-    res.status(200).send("Tip address added to issue");
+    res.status(201).send("Bounty address added to issue");
     return;
   }
 
@@ -133,7 +134,7 @@ app.post("/", async (req, res) => {
     const repo_id = req.body?.repository?.id;
     const issue_id = req.body?.issue.number;
 
-    // await refundingIssue(repo_id, full_name, issue_id);
+    await refundIssue(repo_id, full_name, issue_id);
 
     res.status(200).send("Issue refunded");
     return;
@@ -145,10 +146,9 @@ app.post("/", async (req, res) => {
     req.body?.action === "closed" &&
     req.body?.pull_request?.merged === true
   ) {
-    console.log("merged " + req.body?.pull_request?.id);
+    console.log(`Issue merged ${req.body?.pull_request?.id}`);
 
     const assignee_id = req.body?.pull_request?.assignee?.id;
-
     const txid = await fundIssue(repo_id, full_name, issue_id, amount);
 
     if (txid === undefined) {
@@ -157,7 +157,7 @@ app.post("/", async (req, res) => {
     }
 
     res
-      .status(200)
+      .status(201)
       .send(`PR closed and bounty sent to assignee with TX: ${txid}`);
     return;
   }
@@ -198,54 +198,49 @@ const addAssignedUserToIssue = async (full_name, issue, user_id) => {
   });
 };
 
-const addTipJarToIssue = async (repo_id, full_name, issue) => {
+const addBountyAddressIssue = async (repo_id, full_name, issue) => {
   const octokit = createOctokit();
   const address = getIssueAddress(repo_id, issue);
 
   await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
-    body: `This issue's unique tip jar address is ${address}`,
+    body: `This issue's unique bounty address is ${address}`,
     headers: {
       "X-GitHub-Api-Version": "2022-11-28",
     },
   });
 };
 
-const refundingIssue = async (repo_id, full_name, issue) => {
-  const octokit = createOctokit();
-  const address = getIssueAddress(repo_id, issue);
+const refundIssue = async (repo_id, full_name, issue_id) => {
+  const address = getIssueAddress(repo_id, issue_id);
 
   const balanceResponse = await getBalance(address);
   if (balanceResponse?.amount === 0) {
     return;
   }
 
-  // const treasury = getRepoAddress(repo_id);
-  // const txid = await sendTip(
-  //   repo_id,
-  //   address,
-  //   treasury,
-  //   balanceResponse.amount
-  // );
+  const treasury = getRepoAddress(repo_id);
+  const txid = await sendFromIssue(repo_id, issue_id, treasury);
 
-  // await octokit.request(`POST /repos/${full_name}/issues/${issue}/comments`, {
-  //   body: `Refunding btc back to the treasury ${treasury} from the tip jar ${address}. The TX hash is ${txid}`,
-  //   headers: {
-  //     "X-GitHub-Api-Version": "2022-11-28",
-  //   },
-  // });
+  const octokit = createOctokit();
+  await octokit.request(`POST /repos/${full_name}/issues/${issue_id}/comments`, {
+    body: `Refunding btc back to the treasury ${treasury} from the issue ${address}. The TX hash is ${txid}`,
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
 };
 
-// Send a tip from the issues address to GH user
+// Send the bounty wallets amount the issues address to GH user
 const payBounty = async (full_name, pr, assignee_id) => {
   const assigneeAddress = getUserAddress(repo_id, assignee_id);
-  const txid = await sendFromTreasury(repo_id, amount, assigneeAddress);
+  // const txid = await sendFromTreasury(repo_id, amount, assigneeAddress);
 
   if (txid === undefined) {
     return;
   }
 
   const octokit = await createOctokit();
-  const message = `This PR has been closed and the tip jar address has been sent to ${assignee}`;
+  const message = `This PR has been closed and the bounty balance has been sent to ${assignee}`;
 
   // Add to PR comment
   await octokit.request(`POST /repos/${full_name}/issues/${pr}/comments`, {

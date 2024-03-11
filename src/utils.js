@@ -25,7 +25,6 @@ const getMnemonic = () => {
   );
 };
 
-
 // Note, change will go to the treasury address or the user's address
 const getUserAddress = (user_id) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
@@ -190,6 +189,66 @@ const sendAll = async (index, to) => {
   return txid;
 };
 
+const sendFromIssue = async (repo_id, issue_id, to) => {
+  const coin = network === bitcoin.networks.testnet ? "1" : "0";
+  const network_id = network === bitcoin.networks.testnet ? "84" : "44";
+  const path = `m/${network_id}'/${coin}'/0'/0/${repo_id}/${issue_id}`;
+  const mnemonic = getMnemonic();
+
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const root = bip32.fromSeed(seed, network);
+  const child = root.derivePath(path);
+
+  const issue = bitcoin.payments.p2wpkh({
+    pubkey: child.publicKey,
+    network: network,
+  });
+
+  const balance = await getBalance(issue.address);
+  const amount = balance.balance - FEE;
+  const from = issue.address;
+
+  // example https://bitcoin.stackexchange.com/questions/118945/how-to-build-a-transaction-using-bitcoinjs-lib
+  const psbt = new bitcoin.Psbt({ network: network });
+
+  const unspentIDs = await getUnspentTxIDs(from);
+
+  if (unspentIDs.length === 0) {
+    console.log("No unspent txs");
+    return;
+  }
+
+  const utxo = await getAUtxo(unspentIDs[0], from, amount);
+  const txAsHex = await getTxAsHex(unspentIDs[0]);
+
+  const input = {
+    hash: unspentIDs[0],
+    index: utxo.index,
+    nonWitnessUtxo: Buffer.from(txAsHex, "hex"),
+  };
+
+  psbt.addInput(input);
+
+  const output = {
+    address: to,
+    value: amount,
+  };
+
+  psbt.addOutput(output);
+
+  // https://github.com/bitcoinjs/bitcoinjs-lib/blob/master/test/integration/transactions.spec.ts#L24C5-L26C7
+  const pk = ECPair.fromWIF(child.toWIF(), network);
+
+  psbt.signInput(0, pk);
+  psbt.finalizeInput(0);
+
+  const txHex = psbt.extractTransaction().toHex();
+  console.log(`tx to broadcast: ${txHex}`);
+
+  const txid = await broadcast(txHex);
+  return txid;
+};
+
 const sendFromTreasury = async (repo_id, amount, to) => {
   const coin = network === bitcoin.networks.testnet ? "1" : "0";
   const network_id = network === bitcoin.networks.testnet ? "84" : "44";
@@ -205,16 +264,13 @@ const sendFromTreasury = async (repo_id, amount, to) => {
     network: network,
   });
 
-  const treasuryBalance = await getBalance(treasury.address);
+  const balance = await getBalance(treasury.address);
 
-  if (treasuryBalance.balance < amount) {
+  if (balance.balance < amount) {
     return;
   }
 
-  // https://live.blockcypher.com/btc-testnet/address/tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0/
-  // tb1q26y7u4jw3canmy3g637tna7qpr0degnzvv0fh0
   const from = treasury.address;
-  console.log("from: " + from);
 
   // example https://bitcoin.stackexchange.com/questions/118945/how-to-build-a-transaction-using-bitcoinjs-lib
   const psbt = new bitcoin.Psbt({ network: network });
@@ -260,9 +316,7 @@ const sendFromTreasury = async (repo_id, amount, to) => {
   psbt.finalizeInput(0);
 
   const txHex = psbt.extractTransaction().toHex();
-
-  console.log("tx to broadcast: ");
-  console.log(txHex);
+  console.log(`tx to broadcast: ${txHex}`);
 
   const txid = await broadcast(txHex);
   return txid;
@@ -274,5 +328,6 @@ module.exports = {
   getUserAddress,
   getBalance,
   getMnemonic,
-  sendFromTreasury,
+  sendFromIssue,
+  sendFromTreasury
 };
