@@ -267,7 +267,7 @@ const sendFromTreasury = async (repo_id, amount, to) => {
   const balance = await getBalance(treasury.address);
 
   if (balance.balance < amount) {
-    return;
+    return "Insufficient funds";
   }
 
   const from = treasury.address;
@@ -278,20 +278,30 @@ const sendFromTreasury = async (repo_id, amount, to) => {
   const unspentIDs = await getUnspentTxIDs(from);
 
   if (unspentIDs.length === 0) {
-    console.log("No unspent txs");
-    return;
+    return "Error: No unspent txs";
   }
 
-  const utxo = await getAUtxo(unspentIDs[0], from, amount);
-  const txAsHex = await getTxAsHex(unspentIDs[0]);
+  const [utxos] = await Promise.all(
+    unspentIDs.map((txid) => getAllUtxos(txid, from))
+  );
 
-  const input = {
-    hash: unspentIDs[0],
-    index: utxo.index,
-    nonWitnessUtxo: Buffer.from(txAsHex, "hex"),
-  };
+  if (utxos === undefined) {
+    return "Error: No utxos";
+  }
 
-  psbt.addInput(input);
+  for (let i = 0; i < utxos.length; i++) {
+    let total = 0;
+    const txAsHex = await getTxAsHex(unspentIDs[i]);
+
+    const input = {
+      hash: unspentIDs[i],
+      index: utxo.index,
+      nonWitnessUtxo: Buffer.from(txAsHex, "hex"),
+    };
+
+    psbt.addInput(input);
+    total += utxos[i].value;
+  }
 
   const output = {
     address: to,
@@ -300,7 +310,7 @@ const sendFromTreasury = async (repo_id, amount, to) => {
 
   psbt.addOutput(output);
 
-  const change = treasuryBalance.balance - amount - FEE;
+  const change = balance.balance - amount - FEE;
   if (change > 0) {
     const changeOutput = {
       address: from,
@@ -312,8 +322,10 @@ const sendFromTreasury = async (repo_id, amount, to) => {
   // https://github.com/bitcoinjs/bitcoinjs-lib/blob/master/test/integration/transactions.spec.ts#L24C5-L26C7
   const pk = ECPair.fromWIF(child.toWIF(), network);
 
-  psbt.signInput(0, pk);
-  psbt.finalizeInput(0);
+  for (let i = 0; i < utxos.length; i++) {
+    psbt.signInput(utxos[i].index, pk);
+    psbt.finalizeInput(utxos[i].index);
+  }
 
   const txHex = psbt.extractTransaction().toHex();
   console.log(`tx to broadcast: ${txHex}`);
@@ -329,5 +341,5 @@ module.exports = {
   getBalance,
   getMnemonic,
   sendFromIssue,
-  sendFromTreasury
+  sendFromTreasury,
 };

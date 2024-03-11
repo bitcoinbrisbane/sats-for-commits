@@ -149,7 +149,11 @@ app.post("/", async (req, res) => {
     console.log(`Issue merged ${req.body?.pull_request?.id}`);
 
     const assignee_id = req.body?.pull_request?.assignee?.id;
-    const txid = await fundIssue(repo_id, full_name, issue_id, amount);
+    const address = getUserAddress(assignee_id);
+
+    console.log(`Sending bounty to ${address}`);
+
+    const txid = await payBounty(repo_id, full_name, issue_id, amount);
 
     if (txid === undefined) {
       res.status(500).send("Issue funding failed");
@@ -176,7 +180,7 @@ const fundIssue = async (repo_id, full_name, issue_id, amount) => {
   await octokit.request(
     `POST /repos/${full_name}/issues/${issue_id}/comments`,
     {
-      body: `Adding ${amount} sats to the bug bounty. The TX hash is ${txid} https://live.blockcypher.com/btc-testnet/tx/${txid}/`,
+      body: `<!-- This is an auto-generated comment: summarize by satsforcommits.com --> Adding ${amount} sats to the bug bounty. The TX hash https://live.blockcypher.com/btc-testnet/tx/${txid}/.`,
       headers: {
         "X-GitHub-Api-Version": "2022-11-28",
       },
@@ -240,7 +244,7 @@ const payBounty = async (full_name, pr, assignee_id) => {
   }
 
   const octokit = await createOctokit();
-  const message = `This PR has been closed and the bounty balance has been sent to ${assignee}`;
+  const message = `This PR has been closed and the bounty balance has been sent to ${assignee_id}`;
 
   // Add to PR comment
   await octokit.request(`POST /repos/${full_name}/issues/${pr}/comments`, {
